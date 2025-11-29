@@ -173,14 +173,30 @@ app.get('/api/videos/:id', (req, res) => {
         console.log(`Video with id: ${req.params.id} not found`, videoList);
         return send404(res);
     }
-    videoPath = path.join(__dirname, videoObj.videoUrl);
+    return sendJSON(res, videoObj);
+});
+
+app.get('/api/videos/:id/video', (req, res) => {
+    console.log(`Received request for ${req.url}`);
+    const videoObj = videoList.find(v => v.id === req.params.id);
+    if(!videoObj){
+        console.log(`Video with id: ${req.params.id} not found`, videoList);
+        return send404(res);
+    }
+    const videoPath = path.join(__dirname, videoObj.videoUrl);
     console.log(`Serving video file from path: ${videoPath}`);
     return sendFile(res, videoPath, 'video/mp4');
 });
 
-app.get('/api/thumbnails/:id', (req, res) => {
+app.get('/api/videos/:id/thumbnail', (req, res) => {
     console.log(`Received request for ${req.url}`);
-    const thumbnailPath = path.join(__dirname, 'thumbnails', req.params.id);
+    const videoObj = videoList.find(v => v.id === req.params.id);
+    if(!videoObj){
+        console.log(`Thumbnail for id: ${req.params.id} not found`, videoList);
+        return send404(res);
+    }
+    const thumbnailPath = path.join(__dirname, videoObj.thumbnailUrl);
+    console.log(`Serving thumbnail file from path: ${thumbnailPath}`);
     return sendFile(res, thumbnailPath, 'image/png');
 });
 
