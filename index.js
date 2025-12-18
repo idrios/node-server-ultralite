@@ -57,7 +57,7 @@ const app = {
     },
 
     findEndpointHandler: (method, path) => {
-        if(!app.endpoints[method]) return null;
+        if(!app.endpoints[method]) return { handler: null, params: null };
 
         for(const endpoint of app.endpoints[method]){
             const params = app.matchRoute(endpoint.path, path);
@@ -67,7 +67,7 @@ const app = {
                 return { handler: endpoint.handler, params };
             }
         }
-        return null;
+        return {handler: null, params: null};
     },
 
     matchRoute: (pattern, path) => {
@@ -118,34 +118,69 @@ const send404 = (res) => {
 }
 
 const sendFile = (res, filePath, contentType) => {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+
     fs.readFile(filePath, (err, data) => {
         if (err) {
             send404(res);
         } else {
             res.writeHead(200, {
                 'Content-Type': contentType,
-                'Access-Control-Allow-Origin': '*'
+                'Content-Length': fileSize,
+                'Access-Control-Allow-Origin': '*', 
+                'Accept-Ranges': 'bytes' // Added for video streaming; tells browser it can request ranges
             });
             res.end(data);
         }
     });
 }
 
-// WIP
-// const sendFileAsStream = (res, filePath, contentType) => {
-//     const readStream = fs.createReadStream(filePath);
-//     readStream.on('open', () => {
-//         res.writeHead(200, { 
-//             'Content-Type': contentType,
-//             'Content-Length'
-//             'Access-Control-Allow-Origin': '*'
-//         });
-//         readStream.pipe(res);
-//     });
-//     readStream.on('error', (err) => {
-//         send404(res);
-//     });
-// }
+const sendFileAsStream = (res, filePath, contentType, rangeHeader) => {
+    fs.stat(filePath, (err, stat) => {
+        if (err || !stat.isFile()) return send404(res);
+        
+        const fileSize = stat.size; // bytes
+
+        console.log("rangeHeader: ", rangeHeader);
+        
+        if (!rangeHeader || rangeHeader.length === 0) {
+            res.writeHead(200, {
+                'Accept-Ranges': 'bytes',
+                'Content-Type': contentType,
+                'Content-Length': fileSize,
+                'Access-Control-Allow-Origin': '*'
+            });
+            fs.createReadStream(filePath).pipe(res);
+            return;
+        }
+
+        const range = rangeHeader.replace(/bytes=/, "").split("-");
+
+        const start = parseInt(range[0], 10);
+        const end = range[1] ? parseInt(range[1], 10) : fileSize - 1;
+
+        const chunkSize = (end - start) + 1;
+
+        const responseHeaders = {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Type': contentType,
+            'Content-Length': chunkSize,
+            'Access-Control-Allow-Origin': '*',
+            'Connection': 'keep-alive'
+        }
+
+        console.log("Response headers: ", responseHeaders);
+
+        console.log("file path: ", filePath, " start: ", start, " end: ", end);
+
+        res.writeHead(206, responseHeaders);
+        fs.createReadStream(filePath, { start, end, highWaterMark: 4 * 1024 * 1024 })
+            .on('error', () => send404(res))
+            .pipe(res);
+    });
+}
 
 
 // *********************************************************************** //
@@ -161,7 +196,7 @@ app.get('/favicon.ico', (req, res) => {
     return send404(res);
 });
 
-app.get('/api', (req, res) => {
+app.get('/api/videos', (req, res) => {
     console.log(`Received request for ${req.url}`);
     return sendJSON(res, { videos: videoList });
 });
@@ -183,9 +218,9 @@ app.get('/api/videos/:id/video', (req, res) => {
         console.log(`Video with id: ${req.params.id} not found`, videoList);
         return send404(res);
     }
-    const videoPath = path.join(__dirname, videoObj.videoUrl);
+    const videoPath = path.join(__dirname, videoObj.internalVideoUrl);
     console.log(`Serving video file from path: ${videoPath}`);
-    return sendFile(res, videoPath, 'video/mp4');
+    return sendFileAsStream(res, videoPath, 'video/mp4', req.headers.range);
 });
 
 app.get('/api/videos/:id/thumbnail', (req, res) => {
@@ -195,11 +230,10 @@ app.get('/api/videos/:id/thumbnail', (req, res) => {
         console.log(`Thumbnail for id: ${req.params.id} not found`, videoList);
         return send404(res);
     }
-    const thumbnailPath = path.join(__dirname, videoObj.thumbnailUrl);
+    const thumbnailPath = path.join(__dirname, videoObj.internalThumbnailUrl);
     console.log(`Serving thumbnail file from path: ${thumbnailPath}`);
-    return sendFile(res, thumbnailPath, 'image/png');
+    return sendFileAsStream(res, thumbnailPath, 'image/png', req.headers.range);
 });
-
 
 // *********************************************************************** //
 // Start server
