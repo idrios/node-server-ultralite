@@ -201,7 +201,7 @@ app.get('/api/videos', (req, res) => {
     return sendJSON(res, { videos: videoList });
 });
 
-app.get('/api/videos/:id', (req, res) => {
+app.get('/api/videos/:id/info', (req, res) => {
     console.log(`Received request for ${req.url}`);
     const videoObj = videoList.find(v => v.id === req.params.id);
     if(!videoObj){
@@ -211,7 +211,7 @@ app.get('/api/videos/:id', (req, res) => {
     return sendJSON(res, videoObj);
 });
 
-app.get('/api/videos/:id/video', (req, res) => {
+app.get('/api/videos/:id', (req, res) => {
     console.log(`Received request for ${req.url}`);
     const videoObj = videoList.find(v => v.id === req.params.id);
     if(!videoObj){
@@ -223,7 +223,7 @@ app.get('/api/videos/:id/video', (req, res) => {
     return sendFileAsStream(res, videoPath, 'video/mp4', req.headers.range);
 });
 
-app.get('/api/videos/:id/thumbnail', (req, res) => {
+app.get('/api/thumbnails/:id', (req, res) => {
     console.log(`Received request for ${req.url}`);
     const videoObj = videoList.find(v => v.id === req.params.id);
     if(!videoObj){
